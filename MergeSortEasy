@@ -1,0 +1,80 @@
+#include<stdio.h>
+#include<cuda.h>
+//N from 0 to 7
+#define N 1024
+
+__global__ void merge(int* a){
+	
+	//__shared__ int old[blockDim.x];
+	int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	
+	int temp, i, j, k, l;
+	 int sorted[N];
+	for (i = 2; i <= N ; i *= 2) {
+		//if(!tid)
+			//count++;
+		if (!(tid % i)) {
+			//int sorted[i];
+			k = tid;
+			l = tid + i / 2;
+			for ( j = 0; j < i; j++) {
+				if (k < tid + i / 2 && l < tid + i) {
+					if (a[k] <= a[l]) {
+						temp = a[k];
+						k++;
+					}
+					else {
+						temp = a[l];
+						l++;
+					}
+				}
+				else {
+					if (k < tid + i / 2) {
+						temp = a[k];
+						k++;
+					}
+						
+					else {
+						temp = a[l];
+						l++;
+					}
+				}
+				sorted[j]= temp; 
+			}
+			for (j = 0; j < i; j++)
+				a[tid + j] = sorted[j];
+		}
+		__syncthreads();
+	}
+}
+
+int main() {
+	// copy dev_a from device to host
+	// c wil hold the mean
+	// dev_a is created on the device and holds the numbers
+	int a[N];
+	int* dev_a;
+
+	//allocate memory on CPU side
+	//a = (int*)malloc(N * sizeof(int));
+
+	for (int i = 0; i < N; i++)
+		a[i] = rand()%1000;
+
+	//allocate memory on GPU side
+	cudaMalloc((void**)&dev_a, N * sizeof(int));
+
+
+	cudaMemcpy(dev_a, a, N * sizeof(int), cudaMemcpyHostToDevice);
+
+	merge<<<1, N>>>(dev_a);
+	// copy mean to c 
+	cudaMemcpy(a, dev_a, N * sizeof(int), cudaMemcpyDeviceToHost);
+
+
+	for (int i = 0; i < N; i++)
+		printf(" %d", a[i]);
+
+	//free(a);
+	cudaFree(dev_a);
+}
