@@ -1,0 +1,124 @@
+#include<stdio.h>
+#include<cuda.h>
+#define M 1024
+
+__global__ void merge_sort(int* mainVec, int N) {
+	int tid = threadIdx.x;
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+	__shared__ int smem[2*M];
+
+	if (index < N) {
+
+		smem[tid] = mainVec[2 * index];
+		if (tid > 0)
+		{
+			smem[tid + M] = mainVec[2 * index - 1];
+		}
+		else {
+			smem[M] = mainVec[(2 * index) + (2 * M) - 1];
+		}
+		__syncthreads();
+		
+		for (int i = 1; i <= M; i = i * 2)
+		{
+			
+			__syncthreads();
+
+			if (tid % i == 0)
+			
+			{
+				int* temp = (int*)malloc(sizeof(int) * 2 * i);
+
+				int ptr1 = 2 * tid;
+				int ptr1s = ptr1;
+				int ptr2 = ptr1 + i;
+				int ptr2s = ptr2;
+				
+				int j=0, flag = 0;
+				for (j = 0; j < 2 * i; j++) {
+					if (smem[ptr1] < smem[ptr2])
+					{
+						temp[j] = smem[ptr1];
+						ptr1++;
+						if (ptr1 - ptr1s == i)
+						{
+							flag = 1;
+							break;
+						}
+					}
+					else {
+						temp[j] = smem[ptr2];
+						ptr2++;
+						if (ptr2 - ptr2s == i)
+						{
+							flag = 2;
+							break;
+						}
+					}
+				}
+				if (flag == 1) {
+					while (ptr2 - ptr2s < i) {
+						temp[++j] = smem[ptr2];
+						
+						ptr2++;
+					}
+				}
+				if (flag == 2)
+				{
+					while (ptr1 - ptr1s < i) {
+						temp[++j] = smem[ptr1];
+						
+						ptr1++;
+					}
+				}
+				
+				
+				__syncthreads();
+				 ptr1 = 2 * tid;
+				for (j = 0; j < 2 * i; j++)
+				{
+					smem[ptr1++] = temp[j];
+				}
+				
+				free(temp);
+			}
+
+			__syncthreads();
+
+		}
+		if (tid == 0)
+		{
+			int n = 2048;
+
+			for (int i = 0, j = 0; j < n; j++, i++) {
+				mainVec[i] = smem[j];
+				
+			}
+		}
+
+	}
+}
+
+int main() {
+
+	int N = 2048;
+	int* mainVec = (int*)malloc(N * sizeof(int));
+	for (int i = 0; i < N;i++) {
+		mainVec[i] = rand() % 100;
+
+	}
+	int* d_mainVec;
+	cudaMalloc(&d_mainVec, N * sizeof(int));
+	cudaMemcpy(d_mainVec, mainVec, N * sizeof(int), cudaMemcpyHostToDevice);
+	
+	merge_sort <<<1, M >> > (d_mainVec, N);
+
+	cudaDeviceSynchronize();
+	cudaMemcpy(mainVec, d_mainVec, N * sizeof(int), cudaMemcpyDeviceToHost);
+	printf("\n\nFinal Result\n");
+	for (int i = 0; i < N; i++)
+	{
+		printf("{ %d }", mainVec[i]);
+
+	}
+}
